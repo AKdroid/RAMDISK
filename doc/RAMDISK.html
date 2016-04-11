@@ -1,0 +1,203 @@
+<!DOCTYPE html PUBLIC "-//IETF//DTD HTML//EN">
+<!-- saved from url=(0065)https://courses.ncsu.edu/csc501/lec/001/wrap/assignments/ram.html -->
+<html><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+<title>RAMDISK</title>
+<style type="text/css"></style></head>
+
+<body>
+<div align="center" style="font-family:Trebuchet MS">
+<div align="left" style="width: 700px;">
+<h1>CSC 501 Program: RAM Filesystem</h1>
+
+<hr>
+<h3>Assignment:</h3>
+<p>
+Implement an in-memory filesystem (ie, RAMDISK) using FUSE.
+</p>
+
+<hr>
+<h3>Due:</h3>
+See home
+<a href="https://courses.ncsu.edu/csc501/lec/001/index.html">page</a>.
+
+<hr>
+<h3>Description</h3>
+
+<p>
+In this program students will design, implement, and evaluate an
+<i>in-memory filesystem</i>.
+</p>
+<p>
+</p>
+
+<h4>FUSE</h4>
+
+Modern operating systems support multiple filesystems.
+The operating system directs each filesystem operation to the
+appropriate implementation of the routine.
+It multiplexes the filesystem calls across many distinct
+implementations.
+For example, on a read system call the operation system uses NFS code
+if it is an NFS file but uses ext3 code if it is an ext3 file.
+<p>
+<a href="https://github.com/libfuse/libfuse">FUSE</a>
+(Filesystem in Userspace) is an interface that exports filesystem
+operations to user-space.
+Thus filesystem routines are executed in user-space.
+Continuing the example, if the file is a FUSE file then operating
+system upcalls into user space in order to invoke the code associated
+with read.
+
+</p><h3>RAMDISK</h3>
+
+<p>
+Students will create an <i>in-memory filesystem</i>.
+Instead of reading and writing disk blocks, the RAMDISK filesystem
+will use main memory for storage.
+(Note: When the main memory is over allocated, the operating system will page
+some memory out to disk.
+For this assignment, we still consider that in-memory.)
+</p>
+<p>
+The RAMDISK filesystem  will support the basic POSIX/Unix commands
+listed below.
+Externally, the RAMDISK appears as a standard Unix FS.
+Notably, it is hierarchtical (has directories) and must support
+standard accesses, such as read, write, and append. 
+However, the filesystem is not persistent.
+The data and metadata are lost when the process terminates, which is
+also when the process frees the memory it has allocated.
+</p>
+<p>
+The internal design of the filesystem is left to the student.
+For example, the Unix inode structure does not have to be mimicked; in
+fact, you need not have inodes at all.
+When RAMDISK is started it will setup the filesystem, including all
+metadata.
+In other words, there is no need to run <i>mkfs(8)</i>.
+</p>
+<p>
+RAMDISK should not write any data to disk.
+</p>
+
+<h4>Basics for RAMDISK</h4>
+
+Be able to run
+<a href="https://courses.ncsu.edu/csc501/lec/001/wrap/assignments/postmark-1.51.c"><i>postmark</i></a>
+in <b>unbuffered</b> mode.
+This requires supporting at least the following
+system calls.
+<ul>
+  <li>open, close
+  </li><li>read, write
+  </li><li>creat [sic], mkdir
+  </li><li>unlink, rmdir
+  </li><li>opendir, readdir
+</li></ul>
+
+<h4>Limitations for RAMDISK</h4>
+
+RAMDISK is <b>not</b> expected to support the following:
+<ul>
+  <li>Access control,</li>
+  <li>Links, and </li>
+  <li>Symbolic links.</li>
+</ul>
+
+<hr>
+<h3>Turn In:</h3>
+Be sure to turnin <b>all</b> the files needed.
+Include a <tt>Makefile</tt> that creates the appropriate files.
+A appropriate penalty will be assessed if this is not so.
+
+Your Makefile should create an executable program named <b>ramdisk</b>, and this program can accept two parameters:
+1) the directory to mount and 2) the size (MB) of your filesystem.  To be specific, this following command
+will be used to mount a ramdisk:
+<blockquote>
+ramdisk /path/to/dir 512
+</blockquote>
+<p>
+Also, denote any resources used--including other students--in a file
+named <b>REFERENCES</b>.
+
+</p><hr>
+<h3>Resources</h3>
+
+<ul>
+  <li>FUSE
+      <ul>
+	<li><a href="https://github.com/libfuse/libfuse">Home page</a>
+	</li><li><a href="https://en.wikipedia.org/wiki/Filesystem_in_Userspace">Wiki</a>
+	</li><li><a href="https://courses.ncsu.edu/csc501/lec/001/fuse.html">FUSE on VCL</a>
+      </li></ul>
+  </li><li>Relevant man pages
+      <ul>
+	<li>close(2), ioctl(2), lseek(2), mmap(2), open(2), pread(2), 
+            readdir(4), readlink(2), write(2), fread(3)
+      </li></ul>
+  </li><li>Useful Tools
+      <ul>
+	<li><a href="http://en.wikipedia.org/wiki/Strace">strace</a>
+		(help you understand the FUSE operations required
+		 to implement)
+      </li></ul>
+</li></ul>
+
+<hr>
+<h3>Evaluation</h3>
+<p>
+The basic evaluation will use <em>postmark</em> and some
+other programs.
+</p>
+
+<hr>
+<h3>Notes:</h3>
+<ul>
+  <li>
+  The code will be tested on the VCL image named
+  <a href="https://courses.ncsu.edu/csc501/lec/001/wrap/assignments/submit.html">here.</a>
+  </li>
+  <li>You can save your postmark parameters into a configuration.
+      For example, 
+      <blockquote>
+          ./postmark <a href="https://courses.ncsu.edu/csc501/lec/001/wrap/assignments/benchmark.conf">benchmark.conf</a>
+      </blockquote>
+  </li>
+  <li>To support <b>vim</b>, you need to implement more FUSE operations;
+      you are engouraged to give it a try if you would like to do so.
+  </li>
+</ul>
+
+<hr>
+<h3>Extra Credit:</h3>
+<p>
+Make the filesystem persistent for 10% extra credit.
+Students that want their program to be graded for extra credit will
+submitted a file named “extra-credit-implemented”.
+(Please use this exact name so that your assignment does not require
+special handling.)
+Programs written for extra credit will accept an additional,
+optional argument that names a file.
+</p><blockquote>
+ramdisk &lt;mount_point&gt; &lt;size&gt; [&lt;filename&gt;]
+</blockquote>
+If the named file exists, then the image is
+read and loaded into the RAM filesystem at startup.
+If it does not exist, then start up a fresh (empty) filesystem. 
+In either case, write the image to the named file when the RAM
+filesystem is unmounted.
+If students do not support extra credit, then their program should
+complain about too many arguments. 
+<p></p>
+
+<hr>
+<h3>Grading:</h3>
+<p>
+The weighting of this assignment is given in
+<a href="https://courses.ncsu.edu/csc501/lec/001/policies.html#grading">policies</a>. 
+</p>
+
+<hr>
+
+ 
+</div></div></body></html>

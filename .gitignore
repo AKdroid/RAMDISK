@@ -1,0 +1,7 @@
+tests/*.o
+ramdisk
+src/*.o
+fuse-2.9.5/
+build/
+*.tar.gz
+*.swp
