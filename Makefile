@@ -20,6 +20,9 @@ listtest.o: $(TESTS)/list_test.c $(SRC)/list.c
 hashtabletest.o: $(TESTS)/hash_table_test.c $(SRC)/hashtable.c list.o hashtable.o
 	$(CC) $(CCFLAGS) $(BUILDDIR)/list.o $(BUILDDIR)/hashtable.o $(TESTS)/hash_table_test.c -o $(TESTS)/hash_table_test.o $(INCLUDE)
 
+stacktest.o: $(TESTS)/stack_test.c $(SRC)/stack.c stack.o
+	$(CC) $(CCFLAGS) $(BUILDDIR)/stack.o $(TESTS)/stack_test.c -o $(TESTS)/stack_test.o $(INCLUDE)
+
 dir: 
 	mkdir $(BUILDDIR)
 
@@ -28,6 +31,10 @@ list.o: $(SRC)/list.c $(LIBDIR)/list.h
 
 hashtable.o: $(SRC)/hashtable.c $(LIBDIR)/hashtable.h
 	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/hashtable.c -o $(BUILDDIR)/hashtable.o $(INCLUDE)
+
+stack.o: $(SRC)/stack.c $(LIBDIR)/stack.h
+	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/stack.c -o $(BUILDDIR)/stack.o $(INCLUDE)
+
 
 clean:
 	rm -rf $(BUILDDIR)
