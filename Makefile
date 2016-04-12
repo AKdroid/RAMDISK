@@ -23,6 +23,9 @@ hashtabletest.o: $(TESTS)/hash_table_test.c $(SRC)/hashtable.c list.o hashtable.
 stacktest.o: $(TESTS)/stack_test.c $(SRC)/stack.c stack.o
 	$(CC) $(CCFLAGS) $(BUILDDIR)/stack.o $(TESTS)/stack_test.c -o $(TESTS)/stack_test.o $(INCLUDE)
 
+blockmanagertest.o: $(TESTS)/memory_block_test.c $(SRC)/memory_block.c memoryblock.o stack.o
+	$(CC) $(CCFLAGS) $(BUILDDIR)/stack.o $(BUILDDIR)/memory_block.o $(TESTS)/memory_block_test.c -o $(TESTS)/memory_block_test.o $(INCLUDE)
+
 dir: 
 	mkdir $(BUILDDIR)
 
@@ -34,6 +37,9 @@ hashtable.o: $(SRC)/hashtable.c $(LIBDIR)/hashtable.h
 
 stack.o: $(SRC)/stack.c $(LIBDIR)/stack.h
 	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/stack.c -o $(BUILDDIR)/stack.o $(INCLUDE)
+
+memoryblock.o: $(SRC)/memory_block.c $(LIBDIR)/memory_block.h
+	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/memory_block.c -o $(BUILDDIR)/memory_block.o $(INCLUDE)
 
 
 clean:
