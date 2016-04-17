@@ -1,0 +1,748 @@
+<!DOCTYPE html PUBLIC "-//W3C//DTD HTML 4.01//EN" "http://www.w3.org/TR/html4/strict.dtd">
+<!-- saved from url=(0082)https://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html -->
+<html lang="en-US"><head><meta http-equiv="Content-Type" content="text/html; charset=windows-1252">
+    
+    <!--<base href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html">--><base href=".">
+    <title>
+    CS135 FUSE Documentation
+    </title>
+<style type="text/css"></style></head>
+
+<body>
+<h1>CS135 FUSE Documentation</h1>
+
+<p>
+There very little FUSE documentation on the <a href="http://fuse.sourceforge.net/">FUSE Web site.</a> A bit more,
+which is unfortunately very outdated, is available from <a href="http://www.ibm.com/developerworks/linux/library/l-fuse/">an IBM
+article from 2006</a>.  If you come across anything more complete or
+more current, I'd appreciate hearing about it so I can add a link to
+it from this site.
+
+</p><h2> Writing a FUSE Client</h2>
+
+The best way to write a fuse client is to start with an example or an
+existing client; I recommend <code>fusexmp.c</code> or
+<code>fusexmp_fh.c</code> (the latter implements file handles, so it's
+a better choice if you're developing a complex filesystem).  The
+existing clients provide a scaffolding for you to work from, but
+you'll still need to understand <a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#function-purposes">what all
+the functions are supposed to do</a>, and also how to <a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#compiling">compile</a> and <a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#running">run</a> your
+client.  That's what this Web page is for.
+
+<h3>Unix Manual Pages</h3>
+
+<p>
+May of the FUSE functions are closely related to Unix system calls.
+Rather than repeating the full specification (especially error
+conditions) here, it's better for you to refer to the Unix man page.
+You can do this on any Unix machine with the "man" command.  By
+convention, if I refer you to the "stat(2) system call", that means
+you should type "man 2 stat" to get the necessary information.
+
+</p><h3>FUSE File Handles</h3>
+
+<p>
+Many FUSE functions offer two ways to identify the file being operated
+upon.  The first, which is always available, is the
+"<code>path</code>" argument, which is the full pathname (relative to
+the filesystem root) of the file in question.  If you choose to do so,
+all your functions can use that argument to locate a file.
+
+</p><p>
+However, pathname lookup is often a very expensive operation, so FUSE
+sometimes provides you another option: a "file handle" in the
+"<code>fuse_file_info</code>" structure.  The file handle is stored in
+the "<code>fh</code>" element of that structure, which is an unsigned
+64-bit integer (<code>uint64_t</code>) uninterpreted by FUSE.  If you
+choose to use it, you should set that field in your
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#open">open</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#create">create</a></code>, and
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/opendir">opendir</a></code> functions; other
+functions can then use it.  In many FUSE implementations, the file
+handle is actually a pointer to a useful data structure, which is
+typecast to an integer to keep the compiler happy.  But you can make
+it an index into an array, a hash key, or pretty much anything else
+you choose.
+
+</p><h3>Getting FUSE Context</h3>
+
+<p>
+For many operations, it is useful to have a relevant "context" in
+which to execute them.  For historical reasons, the context isn't
+passed as an argument; instead you must call
+<code>fuse_get_context</code> with no argument, which returns a
+pointer to a <code>struct fuse_context</code> with the following
+usable elements:
+
+</p><dl>
+    <dt> <code>uid</code>
+	</dt><dd> The (numeric) user ID of the process invoking the operation.
+    </dd><dt> <code>gid</code>
+	</dt><dd> The (numeric) group ID of the process invoking the operation.
+    </dd><dt> <code>pid</code>
+	</dt><dd> The thread (process) ID of the process invoking the operation.
+    </dd><dt> <code>private_data</code>
+	</dt><dd> A pointer (<code>void*</code>) to the private data
+	    returned by the <code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#init">init</a></code> function.
+    </dd><dt> <code>umask</code>
+	</dt><dd> The <code>umask</code> of the process invoking the operation.
+</dd></dl>
+
+<h3><a name="function-purposes">FUSE Functions</a></h3>
+
+<p>
+The following is a brief description of all the API functions you can
+create in a FUSE filesystem.  Note that many are unnecessary,
+especially if you are implementing a partial filesystem like the one
+in this assignment.  However, I have tried to provide full
+documentation here.  Unless otherwise specified, all functions return
+an integer 0 or a positive number for
+success, or a negative value selected from <code>errno.h</code> if
+there is an error.
+
+</p><p>
+All of your functions should be named with a prefix that is closely
+related to your filesystem name.  For example, in an SSH filesystem
+you should use <code>ssh_getattr</code>, <code>ssh_read</code>, etc.
+
+</p><dl>
+    <dt> <code>void* <a name="init">init</a>(struct fuse_conn_info *conn)</code>
+	</dt><dd> Initialize the filesystem.  This function can often be
+	    left unimplemented, but it can be a handy way to perform
+	    one-time setup such as allocating variable-sized data
+	    structures or initializing a new filesystem.
+	    The
+	    <code>fuse_conn_info</code> structure gives information
+	    about what features are supported by FUSE, and can be used
+	    to request certain capabilities (see
+	    <a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#init-args">below</a> for more information).
+	    The return value of this function is available to all file
+	    operations in the <code>private_data</code> field of
+	    <code><a name="fuse_conntext">fuse_context</a></code>.  It
+	    is also passed as a parameter to the destroy() method.
+    </dd><dt> <code>void <a name="destroy">destroy</a>(void* private_data)</code>
+	</dt><dd> Called when the filesystem exits.  The
+	    <code>private_data</code> comes from the return value of
+	    <code>init</code>.
+    </dd><dt> <code><a name="getattr">getattr</a>(const char* path, struct
+	    stat* stbuf)</code>
+	</dt><dd> Return file attributes.  The "stat" structure is
+	    described in detail in the stat(2) manual page.  For the
+	    given pathname, this should fill in the elements of the
+	    "stat" structure.  If a field is meaningless or
+	    semi-meaningless (e.g., <code>st_ino</code>) then it
+	    should be set to 0 or given a "reasonable" value.  This
+	    call is pretty much required for a usable filesystem.
+    </dd><dt> <code><a name="fgetattr">fgetattr</a>(const char* path, struct
+	    stat* stbuf)</code>
+	</dt><dd> As <code>getattr</code>, but called when fgetattr(2) is
+	    invoked by the user program.
+    </dd><dt> <code><a name="access">access</a>(const char* path, mask)</code>
+	</dt><dd> This is the same as the access(2) system call.  It returns
+	    -ENOENT if the <code>path</code> doesn't exist, -EACCESS
+	    if the requested permission isn't available, or 0 for
+	    success.  Note that it can be called on files,
+	    directories, or any other object that appears in the
+	    filesystem.  This call is not required but is highly
+	    recommended.
+    </dd><dt> <code><a name="readlink">readlink</a>(const char* path, char*
+	    buf, size_t size)</code>
+	</dt><dd> If <code>path</code> is a symbolic link, fill
+	    <code>buf</code> with its target, up to
+	    <code>size</code>.  See readlink(2) for how to handle a
+	    too-small buffer and for error codes.  Not required if you
+	    don't support symbolic links.
+	    <strong>NOTE:</strong> Symbolic-link support requires only
+	    <code>readlink</code> and <code>symlink</code>.  FUSE
+	    itself will take care of tracking symbolic links in paths,
+	    so your path-evaluation code doesn't need to worry about it.
+    </dd><dt> <code><a name="opendir">opendir</a>(const char* path, struct
+	    fuse_file_info* fi)</code>
+	</dt><dd> Open a directory for reading.
+    </dd><dt> <code><a name="readdir">readdir</a>(const char* path, void*
+	    buf, fuse_fill_dir_t filler, off_t offset, struct
+	    fuse_file_info* fi)</code>
+	</dt><dd> Return one or more directory entries (<code>struct
+	    dirent</code>) to the caller.  This is one of the most
+	    complex FUSE functions.  It is related to, but not
+	    identical to, the readdir(2) and getdents(2) system calls,
+	    and the readdir(3) library function.  Because of its
+	    complexity, it is described separately <a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#readdir-details">below</a>.  Required for essentially any
+	    filesystem, since it's what makes
+	    <code>ls</code> and a whole bunch of other things work.
+    </dd><dt> <code><a name="mknod">mknod</a>(const char* path, mode_t
+	    mode, dev_t rdev)</code>
+	</dt><dd> Make a special (device) file, FIFO, or socket.  See
+	    mknod(2) for details.  This function is rarely needed,
+	    since it's uncommon to make these objects inside
+	    special-purpose filesystems.
+    </dd><dt> <code><a name="mkdir">mkdir</a>(const char* path, mode_t mode)</code>
+	</dt><dd> Create a directory with the given name.  The directory
+	    permissions are encoded in <code>mode</code>.  See
+	    mkdir(2) for details.  This function is needed for any
+	    reasonable read/write filesystem.
+    </dd><dt> <code><a name="unlink">unlink</a>(const char* path)</code>
+	</dt><dd> Remove (delete) the given file, symbolic link, hard link,
+	    or special node.  Note that if you support hard links,
+	    <code>unlink</code> only deletes the data when the
+	    <em>last</em> hard link is removed.  See unlink(2) for
+	    details.
+    </dd><dt> <code><a name="rmdir">rmdir</a>(const char* path)</code>
+	</dt><dd> Remove the given directory.  This should succeed only if
+	    the directory is empty (except for "." and "..").  See
+	    rmdir(2) for details.
+    </dd><dt> <code><a name="symlink">symlink</a>(const char* to, const
+	    char* from)</code>
+	</dt><dd> Create a symbolic link named "<code>from</code>" which,
+	    when evaluated, will lead to "<code>to</code>".  Not
+	    required if you don't support symbolic links.
+	    <strong>NOTE:</strong> Symbolic-link support requires only
+	    <code>readlink</code> and <code>symlink</code>.  FUSE
+	    itself will take care of tracking symbolic links in paths,
+	    so your path-evaluation code doesn't need to worry about it.
+    </dd><dt> <code><a name="rename">rename</a>(const char* from, const
+	    char* to)</code>
+	</dt><dd> Rename the file, directory, or other object
+	    "<code>from</code>" to the target "<code>to</code>".  Note
+	    that the source and target don't have to be in the same
+	    directory, so it may be necessary to move the source to an
+	    entirely new directory.  See rename(2) for full details.
+    </dd><dt> <code><a name="link">link</a>(const char* from, const char*
+	    to)</code>
+	</dt><dd> Create a hard link between "<code>from</code>" and
+	    "<code>to</code>".  Hard links aren't required for a
+	    working filesystem, and many successful filesystems don't
+	    support them.  If you <em>do</em> implement hard links, be
+	    aware that they have an effect on how <code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#unlink">unlink</a></code> works.  See
+	    <code>link(2)</code> for details.
+    </dd><dt> <code><a name="chmod">chmod</a>(const char* path, mode_t mode)</code>
+	</dt><dd> Change the mode (permissions) of the given object to the
+	    given new permissions.  Only the permissions bits of
+	    <code>mode</code> should be examined.  See chmod(2) for
+	    details.
+    </dd><dt> <code><a name="chown">chown</a>(const char* path, uid_t uid,
+	    gid_t gid</code>
+	</dt><dd> Change the given object's owner and group to the provided
+	    values.  See chown(2) for details.  <strong>NOTE:</strong>
+	    FUSE doesn't deal particularly well with file ownership,
+	    since it usually runs as an unprivileged user and this call
+	    is restricted to the superuser.  It's often easier to
+	    pretend that all files are owned by the user who mounted
+	    the filesystem, and to skip implementing this function.
+    </dd><dt> <code><a name="truncate">truncate</a>(const char* path, off_t size)</code>
+	</dt><dd> Truncate or extend the given file so that it is precisely
+	    <code>size</code> bytes long.  See truncate(2) for
+	    details.  This call is required for read/write
+	    filesystems, because recreating a file will first truncate
+	    it.
+    </dd><dt> <code><a name="ftruncate">ftruncate</a>(const char* path,
+	    off_t size)</code>
+	</dt><dd> As <code>truncate</code>, but called when ftruncate(2) is
+	    called by the user program.
+    </dd><dt> <code><a name="utimens">utimens</a>(const char* path, const
+	    struct timespec ts[2]</code>
+	</dt><dd> Update the last access time of the given object from
+	    ts[0] and the last modification time from ts[1].  Both
+	    time specifications are given to nanosecond resolution,
+	    but your filesystem doesn't have to be that precise; see
+	    utimensat(2) for full details.  Note that the time
+	    specifications are allowed to have certain special values;
+	    however, I don't know if FUSE functions have to support
+	    them.  This function isn't necessary but is nice to have
+	    in a fully functional filesystem.
+    </dd><dt> <code><a name="open">open</a>(const char* path, struct
+	    fuse_file_info* fi)</code>
+	</dt><dd> Open a file.  If you aren't using file handles, this
+	    function should just check for existence and permissions
+	    and return either success or an error code.  If you use
+	    file handles, you should also allocate any necessary
+	    structures and set <code>fi-&gt;fh</code>.  In addition,
+	    <code>fi</code> has some other fields that an advanced
+	    filesystem might find useful; see the structure definition in
+	    <code>fuse_common.h</code> for very brief commentary.
+    </dd><dt> <code><a name="read">read</a>(const char* path, char *buf,
+	    size_t size, off_t offset, struct fuse_file_info* fi)</code>
+	</dt><dd> Read <code>size</code>bytes from the given file into the
+	    buffer <code>buf</code>, beginning <code>offset</code>
+	    bytes into the file.  See read(2) for full details.
+	    Returns the number of bytes transferred, or 0 if
+	    <code>offset</code> was at or beyond the end of the file.
+	    Required for any sensible filesystem.
+    </dd><dt> <code><a name="write">write</a>(const char* path, char *buf,
+	    size_t size, off_t offset, struct fuse_file_info* fi)</code>
+	</dt><dd> As for <code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#read">read</a></code> above,
+	    except that it can't return 0.
+    </dd><dt> <code><a name="statfs">statfs</a>(const char* path, struct
+	    statvfs* stbuf</code>
+	</dt><dd> Return statistics about the filesystem.  See statvfs(2)
+	    for a description of the structure contents.  Usually, you
+	    can ignore the <code>path</code>.  Not required, but handy
+	    for read/write filesystems since this is how programs like
+	    <code>df</code> determine the free space.
+    </dd><dt> <code><a name="release">release</a>(const char* path, struct
+	    fuse_file_info *fi)</code>
+	</dt><dd> This is the only FUSE function that doesn't have a
+	    directly corresponding system call, although close(2)
+	    is related.  <code>Release</code> is called when FUSE is
+	    completely done with a file; at that point, you can free
+	    up any temporarily allocated data structures.  The IBM
+	    document claims that there is exactly one
+	    <code>release</code> per <code>open</code>, but I don't
+	    know if that is true.
+    </dd><dt> <code><a name="releasedir">releasedir</a>(const char* path,
+	    struct fuse_file_info *fi)</code>
+	</dt><dd> This is like <code>release</code>, except for directories.
+    </dd><dt> <code><a name="fsync">fsync</a>(const char* path, int
+	    isdatasync, struct fuse_file_info* fi)</code>
+	</dt><dd> Flush any dirty information about the file to disk.  If
+	    <code>isdatasync</code> is nonzero, only data, not
+	    metadata, needs to be flushed.  When this call returns,
+	    all file data should be on stable storage.  Many
+	    filesystems leave this call unimplemented, although
+	    technically that's a Bad Thing since it risks losing data.
+	    If you store your filesystem inside a plain file on
+	    another filesystem, you can implement this by calling
+	    fsync(2) on that file, which will flush too much data
+	    (slowing performance) but achieve the desired guarantee.
+    </dd><dt> <code><a name="fsyncdir">fsyncdir</a>(const char* path, int
+	    isdatasync, struct fuse_file_info* fi)</code>
+	</dt><dd> Like <code>fsync</code>, but for directories.
+    </dd><dt> <code><a name="flush">flush</a>(const char* path, struct
+	    fuse_file_info* fi)</code>
+	</dt><dd> Called on each close so that the filesystem has a chance
+	    to report delayed errors.  <strong>Important:</strong>
+	    there may be more than one <code>flush</code> call for
+	    each <code>open</code>.  <strong>Note:</strong> There is
+	    no guarantee that <code>flush</code> will ever be called
+	    at all!
+    </dd><dt> <code><a name="lock">lock</a>(const char* path, struct
+	    fuse_file_info* fi, int cmd, struct flock* locks)</code>
+	</dt><dd> Perform a POSIX file-locking operation.  See details <a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#locking-details">below.</a>
+    </dd><dt> <code><a name="bmap">bmap</a>(const char* path, size_t blocksize,
+	    uint64_t* blockno)</code>
+	</dt><dd> This function is similar to bmap(9).  If the filesystem
+	    is backed by a block device, it converts
+	    <code>blockno</code> from a file-relative block number to
+	    a device-relative block.  It isn't entirely clear how the
+	    <code>blocksize</code> parameter is intended to be used.
+    </dd><dt> <code><a name="setxattr">setxattr</a>(const char* path, const
+	    char* name, const char* value, size_t size, int flags)</code>
+	</dt><dd> Set an extended attribute.  See setxattr(2).  This should
+	    be implemented only if <code>HAVE_SETXATTR</code> is true.
+    </dd><dt> <code><a name="getxattr">getxattr</a>(const char* path, const
+	    char* name, char* value, size_t size)</code>
+	</dt><dd> Read an extended attribute.  See getxattr(2).  This should
+	    be implemented only if <code>HAVE_SETXATTR</code> is true.
+    </dd><dt> <code><a name="listxattr">listxattr</a>(const char* path,
+	    const char* list, size_t size)</code>
+	</dt><dd> List the names of all extended attributes.  See
+	    listxattr(2).  This should be implemented only if
+	    <code>HAVE_SETXATTR</code> is true.
+    </dd><dt> <code><a name="ioctl">ioctl</a>(const char* path, int cmd,
+	    void* arg, struct fuse_file_info* fi, unsigned int flags,
+	    void* data</code>
+	</dt><dd> Support the ioctl(2) system call.  As such, almost
+	    everything is up to the filesystem.  On a 64-bit machine,
+	    <code>FUSE_IOCTL_COMPAT</code> will be set for 32-bit ioctls.
+	    The size and direction of data is determined by
+	    <code>_IOC_*()</code> decoding of <code>cmd</code>.  For
+	    <code>_IOC_NONE</code>, <code>data</code> will be
+	    <code>NULL</code>; for <code>_IOC_WRITE</code>
+	    <code>data</code> is being written by the user; for
+	    <code>_IOC_READ</code> it is being read, and if both are
+	    set the data is bidirectional.  In all non-NULL cases, the
+	    area is <code>_IOC_SIZE(cmd)</code> bytes in size.
+    </dd><dt> <code><a name="poll">poll</a>(const char* path, struct
+	    fuse_file_info* fi, struct fuse_pollhandle* ph, unsigned*
+	    reventsp);</code>
+	</dt><dd> Poll for I/O readiness.  If <code>ph</code> is non-NULL,
+	    when the filesystem is ready for I/O it should call
+	    <code>fuse_notify_poll</code> (possibly asynchronously)
+	    with the specified <code>ph</code>; this will clear all
+	    pending <code>poll</code>s.  The callee is responsible for
+	    destroying <code>ph</code> with
+	    <code>fuse_pollhandle_destroy()</code> when
+	    <code>ph</code> is no longer needed.
+</dd></dl>
+
+<h4><a name="init-args">Init Function</a></h4>
+
+<p>
+The initialization function accepts a <code>fuse_conn_info</code>
+structure, which can be used to investigate and control the system's
+capabilities.  The components of this structure are:
+</p><dl>
+    <dt> <code>proto_major</code> and <code>proto_minor</code>
+	</dt><dd> Major and minor versions of the FUSE protocol
+	    (read-only).
+    </dd><dt> <code>async_read</code>
+	</dt><dd> On entry, this is nonzero if asynchronous
+	    reads are supported.  The initialization
+	    function can modify this as desired.  Note
+	    that this field is duplicated by the
+	    <code>FUSE_CAP_ASYNC_READ</code> flag;
+	    asynchronous reads are controlled by the
+	    logical OR of the field and the flag.  (Yes,
+	    this is a silly hangover from the past.)
+    </dd><dt> <code>max_write</code>
+	</dt><dd> The maximum size of a write buffer.  This can be modified
+	    by the init function.  If it is set to less than 4096, it
+	    is increased to that value.
+    </dd><dt> <code>max_readahead</code>
+	</dt><dd> The maximum readahead size.  This can be modified by the
+	    init function.
+    </dd><dt> <code>capable</code>
+	</dt><dd> The capabilities supported by the FUSE kernel module,
+	    encoded as bit flags (read-only).
+    </dd><dt> <code>want</code>
+	</dt><dd> The capabilities desired by the FUSE client, encoded as
+	    bit flags.
+</dd></dl>
+
+<p>
+The capabilities that can be requested are:
+</p><dl>
+    <dt> <code>FUSE_CAP_ASYNC_READ</code>
+	</dt><dd> Use asynchronous reads (default).  To disable this
+	    option, the client must clear both this capability (in the
+	    <code>want</code> flags) and the <code>async_read</code>
+	    field.  If synchronous reads are chosen, Fuse will wait
+	    for reads to complete before issuing any other requests.
+    </dd><dt> <code>FUSE_CAP_POSIX_LOCKS</code>
+	</dt><dd> Set if the client supports "remote" locking via the
+	    <code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#lock">lock</a></code> call.
+    </dd><dt> <code>FUSE_CAP_ATOMIC_O_TRUNC</code>
+	</dt><dd> Set if the filesystem supports the <code>O_TRUNC</code>
+	    open flag.
+    </dd><dt> <code>FUSE_CAP_EXPORT_SUPPORT</code>
+	</dt><dd> Set if the client handles lookups of "." and ".."
+	    itself.  Otherwise, FUSE traps these and handles them.
+    </dd><dt> <code>FUSE_CAP_BIG_WRITES</code>
+	</dt><dd> Set if the filesystem can handle writes larger than 4 KB.
+    </dd><dt> <code>FUSE_CAP_DONT_MASK</code>
+	</dt><dd> Set to prevent the <code>umask</code> from being applied
+	    to files on create operations.  (Note: as far as I can
+	    tell from examining the code, this flag isn't actually
+	    implemented.)
+</dd></dl>
+
+<h4><a name="readdir-details">Readdir Function</a></h4>
+
+<p>
+The <code>readdir</code> function is somewhat like <code>read</code>,
+in that it starts at a given offset and returns results in a
+caller-supplied buffer.  However, the offset not a byte offset, and
+the results are a series of <code>struct dirent</code>s rather than
+being uninterpreted bytes.  To make life easier, FUSE provides a
+"filler" function that will help you put things into the buffer.
+
+</p><p>
+The general plan for a complete and correct <code>readdir</code> is:
+</p><ol>
+    <li> Find the first directory entry following the given <code>offset</code>
+	(see below).
+    </li><li> Optionally, create a <code>struct stat</code> that describes
+	the file as for <code>getattr</code> (but FUSE only looks at
+	<code>st_ino</code> and the file-type bits of
+	<code>st_mode</code>).
+    </li><li> Call the <code>filler</code> function with arguments of
+	<code>buf</code>, the null-terminated filename, the address of
+	your <code>struct stat</code> (or NULL if you have none), and
+	the offset of the <em>next</em> directory entry.
+    </li><li> If <code>filler</code> returns nonzero, or if there are no
+	more files, return 0.
+    </li><li> Find the next file in the directory.
+    </li><li> Go back to step 2.
+</li></ol>
+
+<p>
+From FUSE's point of view, the <code>offset</code> is an uninterpreted
+<code>off_t</code> (i.e., an unsigned integer).  You provide an offset
+when you call <code>filler</code>, and it's possible that such an
+offset might come back to you as an argument later.  Typically, it's
+simply the byte offset (within your directory layout) of the directory
+entry, but it's really up to you.
+
+</p><p>
+It's also important to note that <code>readdir</code> can return
+errors in a number of instances; in particular it can return -EBADF if
+the file handle is invalid, or -ENOENT if you use the
+<code>path</code> argument and the path doesn't exist.
+
+</p><h4><a name="locking-details">Lock function</a></h4>
+
+<p>
+The <code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#lock">lock</a></code> function is somewhat
+complex.  The <code>cmd</code> will be one of <code>F_GETLK</code>,
+<code>F_SETLK</code>, or <code>F_SETLKW</code>.  The fields in
+<code>locks</code> are defined in the fcntl(2) manual page; the
+<code>l_whence</code> field in that structure will always be
+<code>SEEK_SET</code>.
+
+</p><p>
+For checking lock ownership, the <code>fi-&gt;owner</code> argument must
+be used.
+
+<!--
+<P>
+For <CODE>F_GETLK</CODE> operation, the FUSE library will first check
+currently held locks, and if a conflicting lock is found it will
+return information without calling this method.  This is intended to
+ensure that for local locks the <CODE>l_pid</CODE> field is correctly
+filled in.  The results may not be accurate in case of race conditions
+and in the presence of hard links, but according to comments in the
+code, "it's unlikly that an application would rely on accurate
+<CODE>GETLK</CODE> results in these cases."  Um, yeah.
+
+<P>
+If a conflicting lock is not found, the <CODE><A
+HREF="#lock">lock</A></CODE> method will be called, and the filesystem
+may fill in <CODE>l_pid</CODE> with a meaningful value, or it may
+leave this field zero.
+         
+<P>
+For <CODE>F_SETLK</CODE> and <CODE>F_SETLKW</CODE> the
+<CODE>l_pid</CODE> field will be set to the PID of the process
+performing the locking operation.
+         
+<P>
+<STRONG>NOTE:</STRONG> if this method is not implemented, the kernel
+will still allow file locking to work locally.  Hence it is only
+necessary in situations such as network filesystems, where other
+machines may be simultaneously accessing the files.
+-->
+
+</p><p>
+Contrary to what some other documentation states, the FUSE library
+does not appear to do anything special to help you out with locking.
+If you want locking to work, you will need to implement the lock
+function.  (Persons who have more knowledge of how FUSE locking works
+are encouraged to contact me on this topic, since the existing
+documentation appears to be inaccurate.)
+
+</p><h3>The Rest of a FUSE Client</h3>
+
+<p>
+Once you've written your operations, you need some boilerplate.
+As mentioned above, all of your functions should be named with a
+sensible prefix; here I use "<code>prefix</code>" to represent that.
+Create a <code>fuse_operations</code> struct that lists the functions
+you implemented (for any unimplemented ones, simply delete the
+relevant lines):
+
+</p><pre>static struct fuse_operations prefix_oper = {
+    .init        = prefix_init,
+    .destroy     = prefix_destroy,
+    .getattr     = prefix_getattr,
+    .fgetattr    = prefix_fgetattr,
+    .access      = prefix_access,
+    .readlink    = prefix_readlink,
+    .readdir     = prefix_readdir,
+    .mknod       = prefix_mknod,
+    .mkdir       = prefix_mkdir,
+    .symlink     = prefix_symlink,
+    .unlink      = prefix_unlink,
+    .rmdir       = prefix_rmdir,
+    .rename      = prefix_rename,
+    .link        = prefix_link,
+    .chmod       = prefix_chmod,
+    .chown       = prefix_chown,
+    .truncate    = prefix_truncate,
+    .ftruncate   = prefix_ftruncate,
+    .utimens     = prefix_utimens,
+    .create      = prefix_create,
+    .open        = prefix_open,
+    .read        = prefix_read,
+    .write       = prefix_write,
+    .statfs      = prefix_statfs,
+    .release     = prefix_release,
+    .opendir     = prefix_opendir,
+    .releasedir  = prefix_releasedir,
+    .fsync       = prefix_fsync,
+    .flush       = prefix_flush,
+    .fsyncdir    = prefix_fsyncdir,
+    .lock        = prefix_lock,
+    .bmap        = prefix_bmap,
+    .ioctl       = prefix_ioctl,
+    .poll        = prefix_poll,
+#ifdef HAVE_SETXATTR
+    .setxattr    = prefix_setxattr,
+    .getxattr    = prefix_getxattr,
+    .listxattr   = prefix_listxattr,
+    .removexattr = prefix_removexattr,
+#endif
+    .flag_nullpath_ok = 0,                /* See below */
+};
+</pre>
+
+<p>
+Set <code>flag_nullpath_ok</code> nonzero if your code can accept a
+NULL path argument (because it gets file information from
+<code>fi-&gt;fh</code>) for the following operations:
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#fgetattr">fgetattr</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#flush">flush</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#fsync">fsync</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#fsyncdir">fsyncdir</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#ftruncate">ftruncate</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#lock">lock</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#read">read</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#readdir">readdir</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#release">release</a></code>,
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#releasedir">releasedir</a></code>, and
+<code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/fuse_doc.html#write">write</a></code>.
+This will allow FUSE to run more efficiently.
+
+</p><p>
+Finally, since your client is actually an executable program, you need
+a <code>main</code>:
+
+</p><pre>int main(int argc, char *argv[])
+{
+    umask(0);
+    return fuse_main(argc, argv, &amp;prefix_oper, NULL);
+}
+</pre>
+
+<h2><a name="compiling">Compiling Your Program</a></h2>
+
+<p>
+You can do your development on any machine you choose that supports
+FUSE.  Mac users can try <a href="http://code.google.com/p/macfuse/">macfuse</a>; Linux users
+should be able to find FUSE as part of their distribution.
+
+</p><p>
+Compiling a FUSE program requires a slightly complicated command:
+</p><pre>/usr/bin/gcc -g `pkg-config fuse --cflags --libs` my_hello.c -o my_hello
+</pre>
+
+A better approach, of course, is to use <code>make</code>.  This truly
+minimal <code><a href="http://www.cs.hmc.edu/~geoff/classes/hmc.cs135.201001/homework/fuse/Makefile">Makefile</a></code> will let you type
+"<code>make foo</code>" for any <code>foo.c</code>.  You are
+encouraged to use it and extend it to be more sensible.
+
+<strong>NOTE:</strong> On Wilkes, be sure to use "/usr/bin/gcc" rather
+than just "gcc".  Wilkes is specially configured so that plain gcc
+produces 32-bit code, but for this assignment you need 64-bit code.
+
+<h2><a name="running">Running &amp; Testing</a></h2>
+
+<p>
+To run a FUSE program, you'll need two windows and a scratch
+directory.  You'll run your filesystem under a debugger in
+window #1; window #2 will be used for testing.  The scratch directory
+is needed because you must have an empty directory on which to mount
+your shiny new filesystem.
+
+</p><p>
+The simplest (and incorrect, for our purposes) way to run a FUSE
+program is to make a scratch directory and then pass that as an
+argument to the program.  For example, if you're running the "hello,
+world" filesystem (<code>hello.c</code>):
+</p><pre>$ mkdir testdir
+$ ./hello testdir
+$ ls testdir
+hello
+$ cat testdir/hello
+hello, world
+$ fusermount -u testdir
+$ rmdir testdir
+</pre>
+
+<p>
+When you run your program this way, it automatically goes into the
+background and starts serving up your filesystem.  After you finish
+testing, the <code>fusermount</code> command unmounts your filesystem
+and kills the background program.
+
+</p><p>
+As a practical matter, it's easier to leave <code>testdir</code>
+hanging around rather than making it and removing it every time.  Most
+systems have a number of empty directories hanging around just in case
+you want to mount on top of them (often, either <code>/mnt</code> or
+inside <code>/mnt</code>).
+
+</p><p>
+Of course, it's unlikely that your program will work perfectly the
+first time, so it's better to run it under the debugger.  To do that,
+you'll need two windows.  In window #1, do:
+</p><pre>$ mkdir testdir         # if necessary
+$ gdb hello
+[gdb noise]
+(gdb) [set breakpoints, etc.]
+(gdb) run -s -d testdir
+</pre>
+
+<p>
+The <code>-s</code> switch means "single-threaded", which makes gdb
+behave in a much friendlier fashion.  The <code>-d</code> switch means
+"debug"; in addition to printing helpful debugging output, it keeps
+the program in the foreground so gdb won't lose track of it.
+
+</p><p>
+Now, in window #2 you can do:
+</p><pre>$ ls testdir
+...                    # Other trial commands
+$ fusermount -u testdir
+</pre>
+
+<p>
+<strong>IMPORTANT:</strong> You need to do the <code>fusermount</code>
+even if your program crashes or you abort it.
+
+</p><p>
+If you have set breakpoints, when you do "ls testdir", your window may
+seem to hang.  That's OK; just go over to the gdb window and step
+through your code.  When it returns a result, your test window will
+come alive again.
+
+</p><h3>Other Options</h3>
+
+<p>
+Your new FUSE client has a lot of options.  The simplest invocation
+just specifies a mount point.  For example, if your client is named
+<code>fuse_client</code> and you're mounting on "~/foo", use:
+</p><pre>./fuse_client ~/foo
+</pre>
+
+<p>
+There are tons of switches available; use <code>./fuse_client
+-h</code> to see them all.  The important ones are:
+
+</p><dl>
+    <dt> -d
+	</dt><dd> Enable debugging output (implies -f).
+    </dd><dt> -f
+	</dt><dd> Run in foreground; this is useful if you're running under
+	    a debugger.  <strong>WARNING:</strong> When -f is given,
+	    Fuse's working directory is the directory you were in when
+	    you started it.  Without -f, Fuse changes directories to
+	    "/".  This will screw you up if you use relative
+	    pathnames.
+    </dd><dt> -s
+	</dt><dd> Run single-threaded instead of multi-threaded.  This
+	    makes debugging vastly easier, since gdb doesn't handle
+	    multiple threads all that well.  It also protects you from
+	    all sorts of race conditions.  Unless you're trying to
+	    write a production filesystem <em>and</em> you're a
+	    parallelism expert, I recommend that you <em>always</em>
+	    use this switch.
+    </dd><dt> -o [no]rellinks
+	</dt><dd> Transform absolute symlinks to relative (or don't, if
+	    <code>norellinks</code> is given).
+</dd></dl>
+
+Contrary to what the help implies, switches can be specified before
+the mount point, in standard Unix fashion.
+
+<p>
+</p><hr>
+
+<p>
+<em>© 2010, Geoff Kuenning</em>
+
+</p><p>
+This page is maintained by <a href="http://www.cs.hmc.edu/~geoff"> Geoff
+Kuenning</a>.
+
+
+</p></body></html>

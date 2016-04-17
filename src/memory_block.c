@@ -88,7 +88,7 @@ block* get_block(block_manager* manager, int i){
     if(manager==NULL)
         return NULL;
 
-    if(i>= (manager->num_of_blocks) )
+    if(i>= (manager->num_of_blocks)|| i<0 )
         return NULL;
 
     return (manager->blocks) + i ;

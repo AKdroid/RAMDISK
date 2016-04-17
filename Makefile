@@ -9,8 +9,8 @@ TARGET=ramdisk
 TESTS=tests
 
 
-all: dir list.o clean
-	$(CC) $(CCFLAGS) $(BUILDDIR)/list.o $(SRC)/main.c -o $(TARGET) $(INCLUDE)
+all: list.o stack.o memoryblock.o hashtable.o filetable.o
+	$(CC) $(CCFLAGS) $(BUILDDIR)/stack.o $(BUILDDIR)/list.o $(BUILDDIR)/memory_block.o $(BUILDDIR)/filetable.o $(BUILDDIR)/hashtable.o $(SRC)/main.c `pkg-config fuse --cflags --libs` -o $(TARGET) $(INCLUDE)
 
 listtest: dir list.o listtest.o clean 
 
@@ -41,6 +41,8 @@ stack.o: $(SRC)/stack.c $(LIBDIR)/stack.h
 memoryblock.o: $(SRC)/memory_block.c $(LIBDIR)/memory_block.h
 	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/memory_block.c -o $(BUILDDIR)/memory_block.o $(INCLUDE)
 
+filetable.o: hashtable.o $(SRC)/filetable.c $(LIBDIR)/filetable.h
+	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(BUILDDIR)/list.o $(BUILDDIR)/hashtable.o $(SRC)/filetable.c -o $(BUILDDIR)/filetable.o $(INCLUDE)
 
 clean:
 	rm -rf $(BUILDDIR)
