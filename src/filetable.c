@@ -240,4 +240,36 @@ void delete_file_entry(filetable table, char* path){
 
 }
 
+void delete_directory_entry(filetable table, char* path){
 
+    entry* e,*p_directory;
+    int p,c;
+    char* parent, *child;
+    char* temppath = (char*)malloc(strlen(path)+1);
+    e = get_entry(table,path);
+    if(e == NULL)
+        return;
+
+    strcpy(temppath,path);
+    split_path(temppath,&parent,&child);
+
+    p = strcmp(parent,"");
+    c = strcmp(child,"");
+
+    if(p == 0 && c == 0){
+        //Creating root directory
+        child = "/";
+    } else if( p == 0 && c > 0){
+        // 
+        parent = "/";
+    }
+
+    p_directory = get_entry(table,parent);
+
+    delete_from_list(p_directory->children,e->name);
+    delete_from_table(table,e->name);
+    free(e->children);
+    free(e->name);
+    free(e);
+
+}

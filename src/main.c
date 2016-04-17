@@ -253,7 +253,7 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
         off  = h->offset;
     }
     chunk = get_disk_chunk(manager,b->id);
-    chunk = chunk + offset;
+    chunk = chunk + off;
     
     while(size > 0){
 
@@ -276,6 +276,7 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
         off = off + wrt_sz;
         written = written + wrt_sz;
     }
+    debug_viewer(b->id,off);
     h->offset = off;
     h->block_id = b->id;    
     fi->fh = h;
@@ -405,6 +406,62 @@ int ramdisk_unlink(const char* path){
     return 0;
 }
 
+int ramdisk_opendir(const char* path, struct fuse_file_info* fi){
+    
+    entry* e;
+    e = get_entry(ft,path);
+    int rd,wr;
+    struct fuse_context *fc = fuse_get_context();
+    if(e == NULL)
+        return -ENOENT;
+    if (fc->uid == e->info.st_uid){
+        rd = e->info.st_mode & S_IRUSR;
+        wr = e->info.st_mode & S_IWUSR;
+    }
+    else if (fc->gid == e->info.st_gid){
+        rd = e->info.st_mode & S_IRGRP;
+        wr = e->info.st_mode & S_IWGRP;
+    } else {
+        rd = e->info.st_mode & S_IROTH;
+        wr = e->info.st_mode & S_IWOTH;
+    }
+    if(!rd)
+        return -EACCES;
+
+    return 0;    
+}
+
+int ramdisk_rmdir(const char* path){
+
+    entry *e;
+
+    e = get_entry(ft,path);
+    if(e == NULL)
+        return -ENOENT;
+
+    if(e->children == NULL)
+        return -ENOTDIR;
+
+    if(e->children->head != NULL)   
+        return -EINVAL;
+
+    delete_directory_entry(ft,path);
+
+    return 0;
+
+}
+int ramdisk_releasedir(const char* path, struct fuse_file_info *fi){
+
+    
+    entry* e;
+    e = get_entry(ft,path);
+    if(e == NULL)
+        return -ENOENT;
+
+    return 0;
+
+}
+
 static struct fuse_operations ramdisk_oper = {
     .getattr  = ramdisk_getattr,
     .mkdir    = ramdisk_mkdir,
@@ -416,36 +473,41 @@ static struct fuse_operations ramdisk_oper = {
     .truncate = ramdisk_truncate,
     .read       = ramdisk_read,
     .unlink     = ramdisk_unlink,
+    .opendir    = ramdisk_opendir,
+    .rmdir      = ramdisk_rmdir,
+    .releasedir   = ramdisk_releasedir,
 };
-
 
 int main(int argc, char* argv[]){
 
-    int memory_size=20;
+    int memory_size;
     //char* persistent_file;
     entry* e;
     char root[] ="/";
     char test[] ="/x/";
-    /*
+    
     if(argc != 3){
-        printf("Usage: fusermount ./ramdisk <mount-point> <size-in-mb>");
+        printf("Usage: fusermount ./ramdisk <mount-point> <size-in-mb>\n");
         return 0;
     }
     
-    memory_size = atoi(argv[1]);
-    
-    if(memory_size > 1){
+    memory_size = atoi(argv[2]);
+    printf("Memory Size: %d\n",memory_size);    
+
+    if(memory_size < 1){
         printf("file system size should be greater than 0\n");
         return 0;
     }
-    */
     
+     
     manager = get_block_manager(4096,memory_size);
     //init_table(&file_handle_table,11);
     ft = NULL;
     ft = get_file_table(0);
     insert_directory(ft,root,0755);  
-    
+   
+    argc = 2;
+
     return fuse_main(argc, argv, &ramdisk_oper, NULL);
 
 }

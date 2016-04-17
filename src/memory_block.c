@@ -38,13 +38,14 @@ block_manager* get_block_manager(int block_size, int file_system_size){
 
     block_manager* manager;
     int i;       
- 
+
     manager = (block_manager*) malloc(sizeof(block_manager));
     
     if(block_size == 0)
         block_size = BLOCK_SIZE;
     
     manager->disk = (char*) malloc((file_system_size+1)*MEGABYTE);
+
 
     if(manager->disk == NULL){
         perror("disk malloc");
