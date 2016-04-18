@@ -17,9 +17,10 @@ filetable ft;
 block_manager* manager = NULL;
 
 struct file_handle{
-    char* key;
-    int block_id;
-    int offset;
+    int w_block;
+    int w_offset;
+    int r_offset;
+    int r_block;
 };
 
 typedef struct file_handle handle;
@@ -29,6 +30,10 @@ typedef struct file_handle handle;
 handle* get_new_handle(){
     handle * h;
     h = (handle*) malloc(sizeof(handle));
+    h->w_block=-1;
+    h->r_block=-1;
+    h->r_offset=0;
+    h->w_offset=0;
     return h;
 }
 
@@ -96,9 +101,8 @@ int ramdisk_create(const char * path, mode_t mode, struct fuse_file_info *fi){
         e = insert_file(ft, path, mode);
         e->info.st_uid = fc->uid;
         e->info.st_gid = fc->gid;
-        h->key = e->name;
-        h->offset=0;
-        h->block_id=-1;
+        //h->key = e->name;
+        //h->total_offset=0;
     } else {
         return ramdisk_open(path,fi);
     }
@@ -150,25 +154,24 @@ int ramdisk_open(const char* path, struct fuse_file_info* fi){
     }
 
     h = get_new_handle();
-    h->key=e->name;
     if(ap > 0){        
-        h->block_id = e->memory_block; 
-        b = get_block(manager,h->block_id);
+        h->w_block = e->memory_block; 
+        b = get_block(manager,h->w_block);
         p = NULL;
         while(b!= NULL){
             p = b;  
             b = get_block(manager,b->next_block);
         }
         if(p!=NULL){
-            h->block_id = p->id;
-            h->offset = p->size;
+            h->w_block = p->id;
+            h->w_offset = p->size;
         }
-    }else{
-        if((f & 3) == O_WRONLY)
-            h->block_id = -1;
+    } else {
+        h->r_block = e->memory_block;
+        if((f & O_ACCMODE) == O_WRONLY)
+            h->w_block = -1;
         else
-            h->block_id = e->memory_block;
-        h->offset = 0;
+            h->w_block = e->memory_block;
     }
     fi->fh = h;
     //insert_into_table(&file_handle_table,(void*)h);
@@ -178,24 +181,36 @@ int ramdisk_open(const char* path, struct fuse_file_info* fi){
 int ramdisk_read(const char* path, char *buf, size_t size, off_t offset, struct fuse_file_info* fi){
 
     block *b,*t;
+    entry *e;
     handle* h = (handle*)fi->fh;
-    int bid = h->block_id;
-    int off = h->offset;
+    int bid = h->r_block;
+    int off = h->r_offset;
     int rd = 0;
     size_t rd_size;
     char* chunk;
 
+
     if((fi->flags & 3) != O_RDONLY && (fi->flags & 3) != O_RDWR)
         return -EACCES;
 
-    while(size > 0){
+    e = get_entry(ft,path);
+    if(e == NULL)
+       return -ENOENT;
+
+    if(e->info.st_size - offset <= 0)
+        return 0;
+
+    size = size < (e->info.st_size - offset) ? size : (e->info.st_size - offset);
+
+    while(size  > 0){
         b = get_block(manager,bid);
         if(bid == -1){
             break;
-        }
+        }         
+
         if(off == manager->block_size)
             off = 0;
-        rd_size = manager->block_size - offset < size ? manager->block_size - offset : size ;
+        rd_size = manager->block_size - off < size? manager->block_size - off : size;
         chunk = get_disk_chunk(manager,bid)+off;    
         memcpy(buf,chunk,rd_size);
         rd += rd_size;
@@ -206,8 +221,8 @@ int ramdisk_read(const char* path, char *buf, size_t size, off_t offset, struct 
     }
     if(off == manager->block_size)
         off = 0;
-    h->block_id = bid;
-    h->offset = off;
+    h->r_block = bid;
+    h->r_offset = off;
     fi->fh = h;
     return rd;
 
@@ -229,11 +244,13 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
     int written =0;
     e = get_entry(ft,path); 
 
+
     if((fi->flags & 3) != O_WRONLY && (fi->flags & 3) != O_RDWR)
         return -EACCES;
 
     h = (handle*)fi->fh;    
-    if(h->block_id==-1){
+
+    if(h->w_block==-1){
         b = get_free_block(manager);
         if(b == NULL)
             return -ENOSPC;
@@ -241,16 +258,20 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
         if(e->memory_block == -1)
             e->memory_block = b->id;
     }
-    else if(h->offset == manager->block_size){
-        b = get_free_block(manager);
-        if(b == NULL)
-            return -ENOSPC;
-        t = get_block(manager,h->block_id);
+    else if(h->w_offset == manager->block_size){
+        t = get_block(manager,h->w_block);
+        if(t->next_block == -1){
+            b = get_free_block(manager);
+            if(b == NULL)
+                return -ENOSPC;
+        }else{ 
+            b = get_block(manager,t->next_block);
+        }
         t->next_block = b->id;
         off = 0;
     }else{
-        b = get_block(manager,h->block_id);
-        off  = h->offset;
+        b = get_block(manager,h->w_block);
+        off  = h->w_offset;
     }
     chunk = get_disk_chunk(manager,b->id);
     chunk = chunk + off;
@@ -258,29 +279,34 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
     while(size > 0){
 
         if(off == manager->block_size){
+            if(b->next_block == -1){
             t = get_free_block(manager);
             if(t == NULL)
                 return -ENOSPC;
+            } 
+            else {
+                t = get_block(manager,b->next_block);    
+            }
             b->next_block = t->id;
             b = t;
             off = 0;
             chunk = get_disk_chunk(manager,b->id);
         }
-        wrt_sz = manager->block_size - offset < size ? manager->block_size : size;
-        printf("%u",wrt_sz);
+        wrt_sz = manager->block_size - off < size ? manager->block_size - off: size;
+        debug_viewer(wrt_sz,chunk);
+        printf("%u\n",wrt_sz);
         memcpy(chunk,buf,wrt_sz);
         size -= wrt_sz;
         buf=buf+wrt_sz;
-        e->info.st_size += wrt_sz;
         b->size = b->size + wrt_sz;
         off = off + wrt_sz;
         written = written + wrt_sz;
     }
     debug_viewer(b->id,off);
-    h->offset = off;
-    h->block_id = b->id;    
+    h->w_offset = off;
+    h->w_block = b->id;    
+    e->info.st_size = e->info.st_size > offset+written ? e->info.st_size : offset + written;
     fi->fh = h;
-
     return written;
 
 }
