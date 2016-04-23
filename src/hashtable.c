@@ -88,10 +88,10 @@ void* get_from_table(hash_table* table, char* key){
         }        
         h=h->next;
     }
-
+    /*
     if(payload == NULL)
         printf("Error: Key does not exist\n");
-
+    */
     return payload;
 
 }

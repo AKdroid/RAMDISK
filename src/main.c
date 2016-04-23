@@ -41,6 +41,7 @@ int ramdisk_getattr (const char * path, struct stat *st){
 
     entry* e= NULL;
     e =  get_entry(ft,path);
+    printf("getattr: %s\n",path);
     if(e == NULL)
         return -ENOENT;
     *st = e->info;
@@ -51,8 +52,12 @@ int ramdisk_getattr (const char * path, struct stat *st){
 int ramdisk_mkdir(const char* path, mode_t mode){
 
     int res = 0;
+    int entries_available = get_filetable_entries();
+    if(entries_available <= 0)
+        return -ENOSPC;
     if(insert_directory(ft, path,mode)== NULL)
         res = -ENOSPC;
+    printf("mkdir: path = %s\n",path);
     return res;
 
 }
@@ -69,6 +74,9 @@ int ramdisk_readdir(const char *path, void *buf, fuse_fill_dir_t  filler, off_t 
     e = get_entry(ft, path);
     if(e == NULL)
         return -ENOENT;
+
+    printf("readdir: path = %s\n",path);
+
     is_dir = (e->children != NULL);
     if(is_dir){
         filler(buf,".",&(e->info),0);
@@ -92,21 +100,26 @@ int ramdisk_create(const char * path, mode_t mode, struct fuse_file_info *fi){
     entry *e;
     handle* h;
     struct fuse_context *fc = fuse_get_context();
+    int entries_available = get_filetable_entries();
+    if(entries_available <= 0)
+        return -ENOSPC; 
 
     e = get_entry(ft,path);
 
-    h = get_new_handle();
 
     if(e == NULL){
         e = insert_file(ft, path, mode);
         e->info.st_uid = fc->uid;
         e->info.st_gid = fc->gid;
+        h = get_new_handle();
         //h->key = e->name;
+
         //h->total_offset=0;
     } else {
         return ramdisk_open(path,fi);
     }
     fi->fh=h;
+    printf("create: %s: path, %u: mode\n",path,mode);
     //insert_into_table(file_handle_table);
     return 0;    
 
@@ -174,6 +187,7 @@ int ramdisk_open(const char* path, struct fuse_file_info* fi){
             h->w_block = e->memory_block;
     }
     fi->fh = h;
+    printf("open: path : %s rd : %d wr : %d ap : %d\n",path,rd,wr,ap);
     //insert_into_table(&file_handle_table,(void*)h);
     return 0; 
 }
@@ -188,6 +202,8 @@ int ramdisk_read(const char* path, char *buf, size_t size, off_t offset, struct 
     int rd = 0;
     size_t rd_size;
     char* chunk;
+
+    printf("read: path: %s, size: %d, offset : %d\n",path,size,offset);
 
 
     if((fi->flags & 3) != O_RDONLY && (fi->flags & 3) != O_RDWR)
@@ -224,13 +240,9 @@ int ramdisk_read(const char* path, char *buf, size_t size, off_t offset, struct 
     h->r_block = bid;
     h->r_offset = off;
     fi->fh = h;
+    
     return rd;
 
-}
-
-void debug_viewer(int value, void* mwahaha){
-    int i=i;
-    i++;
 }
 
 int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct fuse_file_info* fi){
@@ -244,6 +256,8 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
     int written =0;
     e = get_entry(ft,path); 
 
+
+    printf("write: path: %s, size: %d, offset : %d\n",path,size,offset);
 
     if((fi->flags & 3) != O_WRONLY && (fi->flags & 3) != O_RDWR)
         return -EACCES;
@@ -293,7 +307,6 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
             chunk = get_disk_chunk(manager,b->id);
         }
         wrt_sz = manager->block_size - off < size ? manager->block_size - off: size;
-        debug_viewer(wrt_sz,chunk);
         printf("%u\n",wrt_sz);
         memcpy(chunk,buf,wrt_sz);
         size -= wrt_sz;
@@ -302,7 +315,6 @@ int ramdisk_write(const char* path, char *buf, size_t size, off_t offset, struct
         off = off + wrt_sz;
         written = written + wrt_sz;
     }
-    debug_viewer(b->id,off);
     h->w_offset = off;
     h->w_block = b->id;    
     e->info.st_size = e->info.st_size > offset+written ? e->info.st_size : offset + written;
@@ -318,6 +330,7 @@ int ramdisk_release(const char* path, struct fuse_file_info *fi){
     fi->fh = NULL;
     if(h != NULL)
         free(h);
+    printf("release: path: %s\n",path);
     return 0;
 
 }
@@ -331,6 +344,8 @@ int ramdisk_truncate(const char* path, off_t size){
     int bid,tid,diff,rd,wr;    
     int final_size= size;
     char* buf;
+
+    printf("truncate: path: %s, size: %d\n",path,size);
 
     if(size < 0)
         return -EINVAL;
@@ -409,6 +424,9 @@ int ramdisk_unlink(const char* path){
     int rd,wr;
     struct fuse_context *fc = fuse_get_context();
     e = get_entry(ft,path);
+
+    printf("unlink: path: %s\n",path);
+
     if(e == NULL)
         return -ENOENT;
     if (fc->uid == e->info.st_uid){
@@ -462,6 +480,7 @@ int ramdisk_rmdir(const char* path){
     entry *e;
 
     e = get_entry(ft,path);
+    printf("rmdir: path: %s\n",path);
     if(e == NULL)
         return -ENOENT;
 
@@ -509,16 +528,18 @@ int main(int argc, char* argv[]){
     int memory_size;
     //char* persistent_file;
     entry* e;
+    int max_entries;
     char root[] ="/";
-    char test[] ="/x/";
-    
+   
+    char modcmd[500];
+ 
     if(argc != 3){
         printf("Usage: fusermount ./ramdisk <mount-point> <size-in-mb>\n");
         return 0;
     }
     
     memory_size = atoi(argv[2]);
-    printf("Memory Size: %d\n",memory_size);    
+    max_entries = memory_size * 256 * 2;
 
     if(memory_size < 1){
         printf("file system size should be greater than 0\n");
@@ -529,9 +550,9 @@ int main(int argc, char* argv[]){
     manager = get_block_manager(4096,memory_size);
     //init_table(&file_handle_table,11);
     ft = NULL;
-    ft = get_file_table(0);
+    ft = get_file_table(0,max_entries);
     insert_directory(ft,root,0755);  
-   
+    
     argc = 2;
 
     return fuse_main(argc, argv, &ramdisk_oper, NULL);

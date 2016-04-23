@@ -41,11 +41,14 @@ block_manager* get_block_manager(int block_size, int file_system_size){
 
     manager = (block_manager*) malloc(sizeof(block_manager));
     
+    manager->num_of_blocks = file_system_size * (MEGABYTE/block_size);
+    
+    manager->num_of_blocks = (manager->num_of_blocks*8)/10; //20% for metadata
+
     if(block_size == 0)
         block_size = BLOCK_SIZE;
     
-    manager->disk = (char*) malloc((file_system_size+1)*MEGABYTE);
-
+    manager->disk = (char*) malloc(((manager->num_of_blocks) + 20 )*block_size );
 
     if(manager->disk == NULL){
         perror("disk malloc");
@@ -53,7 +56,7 @@ block_manager* get_block_manager(int block_size, int file_system_size){
         return NULL;
     }
 
-    manager->num_of_blocks = file_system_size * (MEGABYTE/block_size);
+    //manager->num_of_blocks = file_system_size * (MEGABYTE/block_size);
 
     manager->block_size = block_size;
 
@@ -111,6 +114,7 @@ block* get_free_block(block_manager* manager){
     b = get_block(manager,r);
     manager->available_blocks-=1; 
     b->in_use = 1;
+    printf("get_free_block: available_blocks = %d\n",manager->available_blocks);
     return b;
 }
 
@@ -126,6 +130,9 @@ int release_block(block_manager* manager,block* b){
         return 0;
     initialize_block(b,b->id);
     manager->available_blocks+=1;
+
+    printf("release_block: available_blocks = %d\n",manager->available_blocks);
+
     return 1;
 }
 

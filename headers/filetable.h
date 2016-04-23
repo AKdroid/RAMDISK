@@ -19,7 +19,9 @@ struct filetable_entry{
 typedef struct filetable_entry entry;
 typedef hash_table* filetable;
 
-filetable get_file_table(int size);
+int get_filetable_entries();
+
+filetable get_file_table(int size,int max_entries);
 
 entry* create_directory_entry(char* path, mode_t mode);
 

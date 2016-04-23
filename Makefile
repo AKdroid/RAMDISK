@@ -1,5 +1,5 @@
 CC=gcc
-CCFLAGS= -g -Wall
+CCFLAGS= -g -Wall -w -Wimplicit 
 CCWITHOUTMAIN = -c
 LIBDIR=headers
 INCLUDE=-I headers
@@ -9,7 +9,9 @@ TARGET=ramdisk
 TESTS=tests
 
 
-all: list.o stack.o memoryblock.o hashtable.o filetable.o
+all: dir list.o stack.o memoryblock.o hashtable.o filetable.o main clean
+
+main: dir list.o stack.o memoryblock.o hashtable.o filetable.o
 	$(CC) $(CCFLAGS) $(BUILDDIR)/stack.o $(BUILDDIR)/list.o $(BUILDDIR)/memory_block.o $(BUILDDIR)/filetable.o $(BUILDDIR)/hashtable.o $(SRC)/main.c `pkg-config fuse --cflags --libs` -o $(TARGET) $(INCLUDE)
 
 listtest: dir list.o listtest.o clean 
@@ -29,7 +31,7 @@ blockmanagertest.o: $(TESTS)/memory_block_test.c $(SRC)/memory_block.c memoryblo
 dir: 
 	mkdir $(BUILDDIR)
 
-list.o: $(SRC)/list.c $(LIBDIR)/list.h
+list.o: $(SRC)/list.c $(LIBDIR)/list.h $(BUILDDIR)
 	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/list.c -o $(BUILDDIR)/list.o $(INCLUDE)
 
 hashtable.o: $(SRC)/hashtable.c $(LIBDIR)/hashtable.h
@@ -42,7 +44,7 @@ memoryblock.o: $(SRC)/memory_block.c $(LIBDIR)/memory_block.h
 	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/memory_block.c -o $(BUILDDIR)/memory_block.o $(INCLUDE)
 
 filetable.o: hashtable.o $(SRC)/filetable.c $(LIBDIR)/filetable.h
-	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(BUILDDIR)/list.o $(BUILDDIR)/hashtable.o $(SRC)/filetable.c -o $(BUILDDIR)/filetable.o $(INCLUDE)
+	$(CC) $(CCFLAGS) $(CCWITHOUTMAIN) $(SRC)/filetable.c -o $(BUILDDIR)/filetable.o $(INCLUDE)
 
 clean:
 	rm -rf $(BUILDDIR)

@@ -19,9 +19,12 @@ typedef hashtable* filetable;
 
 */
 
-filetable get_file_table(int size){
+int filetable_entries = 0;
+
+filetable get_file_table(int size, int max_entries){
 
     filetable table = NULL;
+    filetable_entries = max_entries;
     table = (filetable) malloc (sizeof(hash_table));
     if(size == 0)
         size = TABLESIZE;
@@ -29,6 +32,12 @@ filetable get_file_table(int size){
     return table;
 
 }
+
+int get_filetable_entries(){
+
+    return filetable_entries;
+}
+
 
 void split_path(char* p, char ** parent, char ** child){
 
@@ -64,7 +73,7 @@ entry* create_directory_entry(char* key, mode_t mode){
 
     entry * directory;
     list* l= NULL;
-    
+
     directory = (entry*) malloc (sizeof(entry));
     l = (list*)malloc(sizeof(list));
     init_list(l);
@@ -127,6 +136,7 @@ entry* insert_directory(filetable table, char* path, mode_t mode){
     entry* e, *p_directory=NULL;
     char* parent=NULL,*child=NULL;
     int p,c;
+
     char* permpath = (char*)malloc(strlen(path)+1);
     char* temppath = (char*)malloc(strlen(path)+1);
     strcpy(permpath,path);    
@@ -148,14 +158,12 @@ entry* insert_directory(filetable table, char* path, mode_t mode){
 
     p_directory = get_entry(table,parent); 
     
-    printf("%s %p \n",path,p_directory);
-
     if(p_directory != NULL){
         insert_at_tail(p_directory->children,(void*)permpath);
     }        
     insert_into_table(table,permpath,(void*)e);
     free(temppath);
-
+    filetable_entries -= 1;
     return e;
 }
 
@@ -192,7 +200,7 @@ entry* insert_file(filetable table, char* path, mode_t mode){
     }
     insert_into_table(table,permpath,(void*)e);
     free(temppath);
-
+    filetable_entries -= 1;
     return e;
 
 }
@@ -236,8 +244,8 @@ void delete_file_entry(filetable table, char* path){
     delete_from_list(p_directory->children,e->name);
     delete_from_table(table,e->name);
     free(e->name);
-    free(e);
-
+    free(e);    
+    filetable_entries += 1;
 }
 
 void delete_directory_entry(filetable table, char* path){
@@ -270,6 +278,6 @@ void delete_directory_entry(filetable table, char* path){
     delete_from_table(table,e->name);
     free(e->children);
     free(e->name);
-    free(e);
-
+    free(e);    
+    filetable_entries += 1;
 }
